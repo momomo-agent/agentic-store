@@ -245,6 +245,37 @@
     }
   }
 
+  // ── IndexedDB kv backend (browser, no sql.js needed) ──────────────
+
+  function idbBackend(dbName) {
+    const STORE_NAME = 'kv'
+    let _db = null
+
+    function open() {
+      if (_db) return Promise.resolve(_db)
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(dbName, 1)
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE_NAME)
+        req.onsuccess = () => { _db = req.result; resolve(_db) }
+        req.onerror = () => reject(req.error)
+      })
+    }
+    function tx(mode) { return open().then(db => db.transaction(STORE_NAME, mode).objectStore(STORE_NAME)) }
+    function wrap(req) { return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error) }) }
+
+    return {
+      async init() { await open() },
+      async kvGet(key) { return wrap((await tx('readonly')).get(key)) },
+      async kvSet(key, value) { await wrap((await tx('readwrite')).put(value, key)) },
+      async kvDelete(key) { await wrap((await tx('readwrite')).delete(key)) },
+      async kvKeys() { return wrap((await tx('readonly')).getAllKeys()) },
+      async kvClear() { await wrap((await tx('readwrite')).clear()) },
+      async kvHas(key) { return (await wrap((await tx('readonly')).count(key))) > 0 },
+      async flush() {},
+      async close() { if (_db) { _db.close(); _db = null } },
+    }
+  }
+
   // ── localStorage fallback (no SQLite) ────────────────────────────
 
   function lsBackend(prefix) {
@@ -310,8 +341,11 @@
         (typeof globalThis !== 'undefined' && globalThis.initSqlJs)) {
       return 'sqlite-wasm'
     }
-    // Browser IndexedDB available (for sql.js persistence) but no sql.js loaded
-    // Fall back to localStorage
+    // Browser — IndexedDB kv (no sql.js needed)
+    if (typeof indexedDB !== 'undefined') {
+      return 'idb'
+    }
+    // localStorage
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.setItem('__agentic_store_probe__', '1')
@@ -372,6 +406,9 @@
       }
       case 'sqlite-memory':
         b = sqliteMemoryBackend()
+        break
+      case 'idb':
+        b = idbBackend('agentic-store-' + name)
         break
       case 'ls':
         b = lsBackend('agentic-store-' + name)
