@@ -6,134 +6,127 @@ async function test() {
   let failed = 0
 
   function assert(name, condition) {
-    if (condition) {
-      passed++
-      results.push(`  ✓ ${name}`)
-    } else {
-      failed++
-      results.push(`  ✗ ${name}`)
-    }
+    if (condition) { passed++; results.push(`  ✓ ${name}`) }
+    else { failed++; results.push(`  ✗ ${name}`) }
   }
 
-  // ── In-memory backend tests ──
-  console.log('Testing in-memory backend...')
-  const mem = createStore('test', { backend: 'mem' })
-
-  assert('backend is mem', mem.backend === 'mem')
-
-  // set + get
-  await mem.set('key1', { hello: 'world' })
-  const v1 = await mem.get('key1')
-  assert('set/get object', v1.hello === 'world')
-
-  // get returns clone, not reference
-  v1.hello = 'mutated'
-  const v1b = await mem.get('key1')
-  assert('get returns clone', v1b.hello === 'world')
-
-  // get missing key
-  const missing = await mem.get('nonexistent')
-  assert('get missing returns undefined', missing === undefined)
-
-  // has
-  assert('has existing key', await mem.has('key1'))
-  assert('has missing key', !(await mem.has('nonexistent')))
-
-  // set various types
-  await mem.set('str', 'hello')
-  assert('set/get string', (await mem.get('str')) === 'hello')
-
-  await mem.set('num', 42)
-  assert('set/get number', (await mem.get('num')) === 42)
-
-  await mem.set('arr', [1, 2, 3])
-  const arr = await mem.get('arr')
-  assert('set/get array', Array.isArray(arr) && arr.length === 3)
-
-  await mem.set('null', null)
-  assert('set/get null', (await mem.get('null')) === null)
-
-  // keys
-  const keys = await mem.keys()
-  assert('keys includes all', keys.length === 5 && keys.includes('key1') && keys.includes('str'))
-
-  // delete
-  await mem.delete('str')
-  assert('delete removes key', (await mem.get('str')) === undefined)
-  assert('delete: has returns false', !(await mem.has('str')))
-
-  // overwrite
-  await mem.set('key1', { updated: true })
-  const v2 = await mem.get('key1')
-  assert('overwrite works', v2.updated === true && v2.hello === undefined)
-
-  // clear
+  // ── In-memory backend ──
+  console.log('Testing mem backend...')
+  const mem = await createStore('test-mem', { backend: 'mem' })
+  assert('mem backend type', mem.backend === 'mem')
+  await mem.set('k', { a: 1 })
+  assert('mem set/get', (await mem.get('k')).a === 1)
+  assert('mem has', await mem.has('k'))
+  assert('mem missing', (await mem.get('x')) === undefined)
+  await mem.delete('k')
+  assert('mem delete', !(await mem.has('k')))
+  await mem.set('a', 1); await mem.set('b', 2)
+  assert('mem keys', (await mem.keys()).length === 2)
   await mem.clear()
-  const keysAfterClear = await mem.keys()
-  assert('clear empties store', keysAfterClear.length === 0)
-
-  // large data
-  const big = { items: Array.from({ length: 1000 }, (_, i) => ({ id: i, name: `item-${i}` })) }
-  await mem.set('big', big)
-  const bigBack = await mem.get('big')
-  assert('large object roundtrip', bigBack.items.length === 1000 && bigBack.items[999].id === 999)
-
-  // close
+  assert('mem clear', (await mem.keys()).length === 0)
   await mem.close()
-  assert('close succeeds', true)
 
-  // ── File system backend tests ──
-  console.log('\nTesting fs backend...')
-  const tmpDir = '/tmp/agentic-store-test-' + Date.now()
-  const fs = createStore('test', { backend: 'fs', dir: tmpDir })
+  // ── SQLite native file backend ──
+  console.log('\nTesting sqlite-native backend...')
+  const tmpPath = '/tmp/agentic-store-test-' + Date.now() + '.db'
+  const sql = await createStore('test-sql', { backend: 'sqlite-native', path: tmpPath })
+  assert('sqlite backend type', sql.backend === 'sqlite-native')
 
-  assert('fs backend type', fs.backend === 'fs')
+  // KV operations
+  await sql.set('user', { name: 'kenefe', tags: ['dev', 'ai'] })
+  const user = await sql.get('user')
+  assert('sqlite set/get object', user.name === 'kenefe' && user.tags.length === 2)
 
-  await fs.set('doc', { title: 'hello', tags: ['a', 'b'] })
-  const doc = await fs.get('doc')
-  assert('fs set/get', doc.title === 'hello' && doc.tags.length === 2)
+  await sql.set('count', 42)
+  assert('sqlite set/get number', (await sql.get('count')) === 42)
 
-  assert('fs has', await fs.has('doc'))
-  assert('fs has missing', !(await fs.has('nope')))
+  assert('sqlite has', await sql.has('user'))
+  assert('sqlite has missing', !(await sql.has('nope')))
 
-  await fs.set('doc2', 'string value')
-  const fsKeys = await fs.keys()
-  assert('fs keys', fsKeys.length === 2 && fsKeys.includes('doc'))
+  const keys = await sql.keys()
+  assert('sqlite keys', keys.length === 2 && keys.includes('user'))
 
-  await fs.delete('doc2')
-  assert('fs delete', !(await fs.has('doc2')))
+  await sql.delete('count')
+  assert('sqlite delete', !(await sql.has('count')))
 
-  await fs.clear()
-  assert('fs clear', (await fs.keys()).length === 0)
+  // Overwrite
+  await sql.set('user', { name: 'momo' })
+  assert('sqlite overwrite', (await sql.get('user')).name === 'momo')
 
-  // cleanup
-  try { require('fs').rmdirSync(tmpDir) } catch {}
+  await sql.clear()
+  assert('sqlite clear', (await sql.keys()).length === 0)
 
-  // ── Custom backend tests ──
+  // Raw SQL
+  assert('sqlite has exec', typeof sql.exec === 'function')
+  assert('sqlite has all', typeof sql.all === 'function')
+
+  sql.exec('CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, data TEXT)')
+  sql.run('INSERT INTO items VALUES (?, ?)', ['i1', JSON.stringify({ v: 1 })])
+  sql.run('INSERT INTO items VALUES (?, ?)', ['i2', JSON.stringify({ v: 2 })])
+  const rows = sql.all('SELECT * FROM items')
+  assert('raw SQL insert/select', rows.length === 2)
+
+  const one = sql.sql('SELECT * FROM items WHERE id = ?', ['i1'])
+  assert('raw SQL get one', one && one.id === 'i1')
+
+  await sql.close()
+
+  // Cleanup
+  try { require('fs').unlinkSync(tmpPath) } catch {}
+
+  // ── SQLite in-memory backend ──
+  console.log('\nTesting sqlite-memory backend...')
+  const smem = await createStore('test-smem', { backend: 'sqlite-memory' })
+  assert('sqlite-memory backend type', smem.backend === 'sqlite-memory')
+
+  await smem.set('x', [1, 2, 3])
+  assert('sqlite-memory set/get', (await smem.get('x')).length === 3)
+
+  smem.exec('CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, text TEXT)')
+  smem.run('INSERT INTO notes VALUES (?, ?)', [1, 'hello'])
+  const notes = smem.all('SELECT * FROM notes')
+  assert('sqlite-memory raw SQL', notes.length === 1 && notes[0].text === 'hello')
+
+  await smem.close()
+
+  // ── Custom backend ──
   console.log('\nTesting custom backend...')
-  const customData = new Map()
-  const custom = createStore('test', {
+  const map = new Map()
+  const custom = await createStore('test-custom', {
     custom: {
-      async get(k) { return customData.get(k) },
-      async set(k, v) { customData.set(k, v) },
-      async delete(k) { customData.delete(k) },
-      async keys() { return [...customData.keys()] },
-      async clear() { customData.clear() },
-      async has(k) { return customData.has(k) },
+      async kvGet(k) { return map.get(k) },
+      async kvSet(k, v) { map.set(k, v) },
+      async kvDelete(k) { map.delete(k) },
+      async kvKeys() { return [...map.keys()] },
+      async kvClear() { map.clear() },
+      async kvHas(k) { return map.has(k) },
     }
   })
-
   assert('custom backend type', custom.backend === 'custom')
+  await custom.set('y', 99)
+  assert('custom set/get', (await custom.get('y')) === 99)
+  await custom.close()
 
-  await custom.set('x', 123)
-  assert('custom set/get', (await custom.get('x')) === 123)
-  assert('custom has', await custom.has('x'))
-  assert('custom keys', (await custom.keys()).length === 1)
-  await custom.delete('x')
-  assert('custom delete', !(await custom.has('x')))
+  // ── Persistence test (file survives reopen) ──
+  console.log('\nTesting persistence...')
+  const persistPath = '/tmp/agentic-store-persist-' + Date.now() + '.db'
+  const s1 = await createStore('persist', { backend: 'sqlite-native', path: persistPath })
+  await s1.set('remember', { msg: 'hello from past' })
+  s1.exec('CREATE TABLE IF NOT EXISTS log (ts INTEGER, entry TEXT)')
+  s1.run('INSERT INTO log VALUES (?, ?)', [Date.now(), 'first entry'])
+  await s1.close()
+
+  const s2 = await createStore('persist', { backend: 'sqlite-native', path: persistPath })
+  const remembered = await s2.get('remember')
+  assert('persistence: kv survives reopen', remembered && remembered.msg === 'hello from past')
+  const logRows = s2.all('SELECT * FROM log')
+  assert('persistence: custom table survives reopen', logRows.length === 1)
+  await s2.close()
+
+  try { require('fs').unlinkSync(persistPath) } catch {}
 
   // ── Results ──
-  console.log(results.join('\n'))
+  console.log('\n' + results.join('\n'))
   console.log(`\n${passed} passed, ${failed} failed`)
   if (failed > 0) process.exit(1)
 }

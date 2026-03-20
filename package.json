@@ -8,5 +8,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/momomo-agent/agentic-store"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0"
   }
 }
