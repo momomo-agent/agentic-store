@@ -36,8 +36,23 @@ await store.clear()
 ## Options
 
 ```js
+// Force a specific backend
+createStore('my-app', { backend: 'idb' })
+
+// File system with custom directory
+createStore('my-app', { backend: 'fs', dir: '/path/to/data' })
+
+// Custom backend — bring your own implementation
 createStore('my-app', {
-  backend: 'idb'   // Force backend: 'idb' | 'ls' | 'mem'
+  custom: {
+    async get(key) { /* ... */ },
+    async set(key, value) { /* ... */ },
+    async delete(key) { /* ... */ },
+    async keys() { /* ... */ },
+    async clear() { /* ... */ },
+    async has(key) { /* ... */ },
+    async close() { /* ... */ },   // optional
+  }
 })
 ```
 
@@ -47,7 +62,9 @@ createStore('my-app', {
 |---------|------|-------|
 | `idb` (IndexedDB) | Default in browsers | ~unlimited |
 | `ls` (localStorage) | Fallback if IDB unavailable | ~5-10MB |
-| `mem` (in-memory) | Node.js / testing / no storage | RAM only |
+| `fs` (file system) | Node.js (auto-detected) | disk |
+| `mem` (in-memory) | No storage available | RAM only |
+| `custom` | Pass `opts.custom` | you decide |
 
 ## Part of the agentic family
 

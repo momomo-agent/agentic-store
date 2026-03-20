@@ -82,6 +82,56 @@ async function test() {
   await mem.close()
   assert('close succeeds', true)
 
+  // ── File system backend tests ──
+  console.log('\nTesting fs backend...')
+  const tmpDir = '/tmp/agentic-store-test-' + Date.now()
+  const fs = createStore('test', { backend: 'fs', dir: tmpDir })
+
+  assert('fs backend type', fs.backend === 'fs')
+
+  await fs.set('doc', { title: 'hello', tags: ['a', 'b'] })
+  const doc = await fs.get('doc')
+  assert('fs set/get', doc.title === 'hello' && doc.tags.length === 2)
+
+  assert('fs has', await fs.has('doc'))
+  assert('fs has missing', !(await fs.has('nope')))
+
+  await fs.set('doc2', 'string value')
+  const fsKeys = await fs.keys()
+  assert('fs keys', fsKeys.length === 2 && fsKeys.includes('doc'))
+
+  await fs.delete('doc2')
+  assert('fs delete', !(await fs.has('doc2')))
+
+  await fs.clear()
+  assert('fs clear', (await fs.keys()).length === 0)
+
+  // cleanup
+  try { require('fs').rmdirSync(tmpDir) } catch {}
+
+  // ── Custom backend tests ──
+  console.log('\nTesting custom backend...')
+  const customData = new Map()
+  const custom = createStore('test', {
+    custom: {
+      async get(k) { return customData.get(k) },
+      async set(k, v) { customData.set(k, v) },
+      async delete(k) { customData.delete(k) },
+      async keys() { return [...customData.keys()] },
+      async clear() { customData.clear() },
+      async has(k) { return customData.has(k) },
+    }
+  })
+
+  assert('custom backend type', custom.backend === 'custom')
+
+  await custom.set('x', 123)
+  assert('custom set/get', (await custom.get('x')) === 123)
+  assert('custom has', await custom.has('x'))
+  assert('custom keys', (await custom.keys()).length === 1)
+  await custom.delete('x')
+  assert('custom delete', !(await custom.has('x')))
+
   // ── Results ──
   console.log(results.join('\n'))
   console.log(`\n${passed} passed, ${failed} failed`)

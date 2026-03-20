@@ -145,13 +145,55 @@
     }
   }
 
+  // ── File system backend (Node.js) ──────────────────────────────
+
+  function fsBackend(dir) {
+    const fs = require('fs')
+    const path = require('path')
+    fs.mkdirSync(dir, { recursive: true })
+
+    function filePath(key) { return path.join(dir, encodeURIComponent(key) + '.json') }
+
+    return {
+      async get(key) {
+        try {
+          const raw = fs.readFileSync(filePath(key), 'utf8')
+          return JSON.parse(raw)
+        } catch { return undefined }
+      },
+      async set(key, value) {
+        fs.writeFileSync(filePath(key), JSON.stringify(value))
+      },
+      async delete(key) {
+        try { fs.unlinkSync(filePath(key)) } catch {}
+      },
+      async keys() {
+        try {
+          return fs.readdirSync(dir)
+            .filter(f => f.endsWith('.json'))
+            .map(f => decodeURIComponent(f.slice(0, -5)))
+        } catch { return [] }
+      },
+      async clear() {
+        try {
+          for (const f of fs.readdirSync(dir)) {
+            if (f.endsWith('.json')) fs.unlinkSync(path.join(dir, f))
+          }
+        } catch {}
+      },
+      async has(key) {
+        return fs.existsSync(filePath(key))
+      },
+      async close() {},
+    }
+  }
+
   // ── Factory ──────────────────────────────────────────────────────
 
   function detectBackend(name) {
     // IndexedDB preferred
     if (typeof indexedDB !== 'undefined') {
       try {
-        // Smoke test — some contexts block IDB (private browsing, etc.)
         const req = indexedDB.open('__agentic_store_probe__', 1)
         req.onsuccess = () => { req.result.close(); indexedDB.deleteDatabase('__agentic_store_probe__') }
         req.onerror = () => {}
@@ -166,6 +208,13 @@
         return 'ls'
       } catch { /* fall through */ }
     }
+    // Node.js — use file system
+    if (typeof require !== 'undefined') {
+      try {
+        require('fs')
+        return 'fs'
+      } catch { /* fall through */ }
+    }
     // In-memory last resort
     return 'mem'
   }
@@ -175,16 +224,40 @@
    *
    * @param {string} name - Namespace (e.g. 'visual-talk', 'my-app')
    * @param {object} [opts] - Options
-   * @param {'idb'|'ls'|'mem'} [opts.backend] - Force a specific backend
+   * @param {'idb'|'ls'|'fs'|'mem'} [opts.backend] - Force a specific backend
+   * @param {string} [opts.dir] - Directory for fs backend (default: ~/.agentic-store/<name>)
+   * @param {object} [opts.custom] - Custom backend: { get, set, delete, keys, clear, has, close }
    * @returns {object} Store with get/set/delete/keys/clear/has/close
    */
   function createStore(name, opts = {}) {
+    // Custom backend — pass through directly
+    if (opts.custom) {
+      const c = opts.custom
+      return {
+        get: (key) => c.get(key),
+        set: (key, value) => c.set(key, value),
+        delete: (key) => c.delete(key),
+        keys: () => c.keys(),
+        clear: () => c.clear(),
+        has: (key) => c.has(key),
+        close: () => (c.close ? c.close() : Promise.resolve()),
+        get backend() { return 'custom' },
+      }
+    }
+
     const backendType = opts.backend || detectBackend(name)
 
     let backend
     switch (backendType) {
       case 'idb': backend = idbBackend('agentic-store-' + name); break
       case 'ls':  backend = lsBackend('agentic-store-' + name); break
+      case 'fs': {
+        const dir = opts.dir || require('path').join(
+          require('os').homedir(), '.agentic-store', name
+        )
+        backend = fsBackend(dir)
+        break
+      }
       case 'mem': backend = memBackend(); break
       default: throw new Error(`Unknown backend: ${backendType}`)
     }
