@@ -48,10 +48,11 @@ store.sql('SELECT * FROM items WHERE id = ?', ['i1'])  // single row
 
 | Backend | When | Storage | Raw SQL |
 |---------|------|---------|--------|
-| `sqlite-native` | Node.js (auto) | File (~/.agentic-store/name.db) | ✓ |
-| `sqlite-wasm` | Browser with sql.js | IndexedDB | ✓ |
-| `sqlite-memory` | Testing | RAM | ✓ |
+| `sqlite-native` | Node.js + better-sqlite3 | File (.db) | ✓ |
+| `sqlite-wasm` | Browser + sql.js | IndexedDB | ✓ |
+| `sqlite-memory` | Testing (SQLite) | RAM | ✓ |
 | `idb` | Browser (no sql.js) | IndexedDB | ✗ |
+| `fs` | Node.js (zero deps) | JSON files | ✗ |
 | `ls` | No IndexedDB | localStorage | ✗ |
 | `mem` | Last resort | RAM | ✗ |
 | `custom` | Bring your own | You decide | Optional |

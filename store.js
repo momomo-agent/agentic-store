@@ -245,6 +245,26 @@
     }
   }
 
+  // ── File system backend (Node.js, zero deps) ─────────────────────
+
+  function fsBackend(dir) {
+    const fs = require('fs')
+    const path = require('path')
+    fs.mkdirSync(dir, { recursive: true })
+    function fp(key) { return path.join(dir, encodeURIComponent(key) + '.json') }
+    return {
+      async init() {},
+      async kvGet(key) { try { return JSON.parse(fs.readFileSync(fp(key), 'utf8')) } catch { return undefined } },
+      async kvSet(key, value) { fs.writeFileSync(fp(key), JSON.stringify(value)) },
+      async kvDelete(key) { try { fs.unlinkSync(fp(key)) } catch {} },
+      async kvKeys() { try { return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => decodeURIComponent(f.slice(0, -5))) } catch { return [] } },
+      async kvClear() { try { for (const f of fs.readdirSync(dir)) { if (f.endsWith('.json')) fs.unlinkSync(path.join(dir, f)) } } catch {} },
+      async kvHas(key) { return fs.existsSync(fp(key)) },
+      async flush() {},
+      async close() {},
+    }
+  }
+
   // ── IndexedDB kv backend (browser, no sql.js needed) ──────────────
 
   function idbBackend(dbName) {
@@ -332,9 +352,10 @@
   // ── Factory ──────────────────────────────────────────────────────
 
   function detectBackend() {
-    // Node.js — try better-sqlite3
+    // Node.js — try better-sqlite3 first, then plain fs
     if (typeof require !== 'undefined') {
       try { require('better-sqlite3'); return 'sqlite-native' } catch {}
+      try { require('fs'); return 'fs' } catch {}
     }
     // Browser — try sql.js
     if (typeof initSqlJs === 'function' ||
@@ -410,6 +431,13 @@
       case 'idb':
         b = idbBackend('agentic-store-' + name)
         break
+      case 'fs': {
+        const dir = opts.dir || require('path').join(
+          require('os').homedir(), '.agentic-store', name
+        )
+        b = fsBackend(dir)
+        break
+      }
       case 'ls':
         b = lsBackend('agentic-store-' + name)
         break

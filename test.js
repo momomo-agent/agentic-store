@@ -89,6 +89,22 @@ async function test() {
 
   await smem.close()
 
+  // ── File system backend ──
+  console.log('\nTesting fs backend...')
+  const tmpDir = '/tmp/agentic-store-fs-' + Date.now()
+  const fs = await createStore('test-fs', { backend: 'fs', dir: tmpDir })
+  assert('fs backend type', fs.backend === 'fs')
+  await fs.set('doc', { title: 'hello' })
+  assert('fs set/get', (await fs.get('doc')).title === 'hello')
+  assert('fs has', await fs.has('doc'))
+  assert('fs keys', (await fs.keys()).length === 1)
+  await fs.delete('doc')
+  assert('fs delete', !(await fs.has('doc')))
+  await fs.set('a', 1); await fs.set('b', 2)
+  await fs.clear()
+  assert('fs clear', (await fs.keys()).length === 0)
+  try { require('fs').rmdirSync(tmpDir) } catch {}
+
   // ── Custom backend ──
   console.log('\nTesting custom backend...')
   const map = new Map()
