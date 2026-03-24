@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agentic-store — SQLite-first persistence for AI apps</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#08080a;--surface:rgba(255,255,255,0.025);--border:rgba(255,255,255,0.05);
+  --text:rgba(255,255,255,0.88);--text2:rgba(255,255,255,0.45);--text3:rgba(255,255,255,0.2);
+  --accent:#fb923c;--accent2:#f59e0b;--green:#4ade80;--purple:#a78bfa;
+  --serif:'Instrument Serif',Georgia,serif;--mono:'Space Mono',monospace;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:999}
+
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:0 10vw;position:relative}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.12);border-radius:20px;font-size:11px;color:var(--accent);margin-bottom:32px;width:fit-content}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.hero h1{font-family:var(--serif);font-size:clamp(48px,8vw,96px);font-weight:400;line-height:1.05;letter-spacing:-0.02em;max-width:900px}
+.hero h1 em{font-style:italic;color:var(--accent)}
+.hero .subtitle{font-size:14px;color:var(--text2);max-width:520px;line-height:1.8;margin-top:28px}
+.hero-actions{display:flex;gap:12px;margin-top:36px}
+.hero-actions a{display:inline-flex;align-items:center;gap:6px;padding:10px 22px;border-radius:6px;font-size:12px;font-family:var(--mono);text-decoration:none;transition:all 0.2s}
+.hero-actions .primary{background:var(--accent);color:#000;border:none}
+.hero-actions .primary:hover{background:var(--accent2)}
+.hero-actions .secondary{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.hero-actions .secondary:hover{border-color:rgba(255,255,255,0.15);color:var(--text)}
+.hero::after{content:'';position:absolute;top:20%;right:5%;width:400px;height:400px;background:radial-gradient(circle,rgba(251,146,60,0.06) 0%,transparent 70%);pointer-events:none;border-radius:50%}
+
+section{padding:80px 10vw}
+.section-label{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:3px;margin-bottom:12px}
+.section-title{font-family:var(--serif);font-size:clamp(28px,4vw,48px);font-weight:400;margin-bottom:40px}
+
+.code-block{background:rgba(255,255,255,0.015);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:24px}
+.code-header{padding:8px 16px;background:rgba(255,255,255,0.02);font-size:11px;color:var(--text3);border-bottom:1px solid var(--border)}
+.code-body{padding:24px;font-size:12px;line-height:1.9;overflow-x:auto;white-space:pre;color:var(--text2)}
+.kw{color:var(--purple)}.fn{color:var(--accent)}.str{color:var(--green)}.cmt{color:var(--text3);font-style:italic}
+
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:28px 24px;transition:all 0.3s}
+.feature-card:hover{border-color:rgba(255,255,255,0.1);transform:translateY(-2px)}
+.feature-card .fc-icon{font-size:24px;margin-bottom:14px}
+.feature-card .fc-title{font-size:13px;font-weight:700;margin-bottom:6px}
+.feature-card .fc-desc{font-size:11px;color:var(--text3);line-height:1.7}
+
+.backends{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.backend-row{display:grid;grid-template-columns:140px 1fr 100px 60px;padding:12px 20px;border-bottom:1px solid var(--border);font-size:11px;align-items:center}
+.backend-row:last-child{border-bottom:none}
+.backend-row.header{background:rgba(255,255,255,0.02);color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:1px;font-size:9px}
+.backend-name{color:var(--accent);font-weight:700}
+.backend-desc{color:var(--text2)}
+.backend-storage{color:var(--text3)}
+.check{color:var(--green)}.cross{color:var(--text3)}
+
+.philosophy{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+.phil-card{padding:32px;border-left:2px solid var(--border)}
+.phil-card.highlight{border-left-color:var(--accent)}
+.phil-card .phil-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px}
+.phil-card .phil-title{font-family:var(--serif);font-size:22px;margin-bottom:10px}
+.phil-card .phil-desc{font-size:11px;color:var(--text2);line-height:1.8}
+
+footer{padding:60px 10vw;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+footer .logo{font-family:var(--serif);font-size:18px;font-style:italic}
+footer .links{display:flex;gap:20px}
+footer a{font-size:11px;color:var(--text3);text-decoration:none}
+footer a:hover{color:var(--text)}
+
+@media(max-width:768px){
+  .hero{padding:0 6vw}section{padding:60px 6vw}
+  .features{grid-template-columns:1fr}
+  .philosophy{grid-template-columns:1fr}
+  .backend-row{grid-template-columns:100px 1fr 80px 50px;font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-badge"><div class="dot"></div>agentic family</div>
+  <h1>Agentic <em>Store</em></h1>
+  <div class="subtitle">
+    SQLite-first persistence for AI apps.<br>
+    Key-value out of the box. Raw SQL when you need it.<br>
+    Browser + Node.js. Zero config.
+  </div>
+  <div class="hero-actions">
+    <a href="https://github.com/momomo-agent/agentic-store" class="primary">GitHub →</a>
+    <a href="https://www.npmjs.com/package/agentic-store" class="secondary">npm</a>
+  </div>
+</div>
+
+<section>
+  <div class="section-label">Quick Start</div>
+  <div class="section-title">Five lines to persist</div>
+  <div class="code-block">
+    <div class="code-header">Key-value API</div>
+    <div class="code-body"><span class="kw">const</span> { <span class="fn">createStore</span> } = <span class="fn">require</span>(<span class="str">'agentic-store'</span>)
+
+<span class="kw">const</span> store = <span class="kw">await</span> <span class="fn">createStore</span>(<span class="str">'my-app'</span>)
+<span class="kw">await</span> store.<span class="fn">set</span>(<span class="str">'user'</span>, { name: <span class="str">'kenefe'</span> })
+<span class="kw">await</span> store.<span class="fn">get</span>(<span class="str">'user'</span>)     <span class="cmt">// { name: 'kenefe' }</span>
+<span class="kw">await</span> store.<span class="fn">keys</span>()          <span class="cmt">// ['user']</span></div>
+  </div>
+  <div class="code-block">
+    <div class="code-header">Raw SQL (SQLite backends)</div>
+    <div class="code-body">store.<span class="fn">exec</span>(<span class="str">'CREATE TABLE items (id TEXT PRIMARY KEY, data TEXT)'</span>)
+store.<span class="fn">run</span>(<span class="str">'INSERT INTO items VALUES (?, ?)'</span>, [<span class="str">'i1'</span>, <span class="str">'{"v":1}'</span>])
+store.<span class="fn">all</span>(<span class="str">'SELECT * FROM items'</span>)  <span class="cmt">// [{id:'i1', data:'{"v":1}'}]</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-label">Features</div>
+  <div class="section-title">What you get</div>
+  <div class="features">
+    <div class="feature-card">
+      <div class="fc-icon">🗄</div>
+      <div class="fc-title">SQLite Everywhere</div>
+      <div class="fc-desc">Browser via sql.js WASM, Node.js via better-sqlite3. Same API, same data model, different runtimes.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">🔑</div>
+      <div class="fc-title">Key-Value Simple</div>
+      <div class="fc-desc">get / set / delete / keys / has / clear. Any JSON-serializable value. No schema needed.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">⚡</div>
+      <div class="fc-title">Raw SQL Escape Hatch</div>
+      <div class="fc-desc">exec / run / all / sql. When key-value isn't enough, drop down to full SQL power.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">💾</div>
+      <div class="fc-title">Auto Persistence</div>
+      <div class="fc-desc">Browser persists to IndexedDB. Node.js persists to file. Debounced writes. beforeunload flush.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">🔌</div>
+      <div class="fc-title">Pluggable Backends</div>
+      <div class="fc-desc">8 built-in backends. Auto-detects the best one. Or bring your own custom backend.</div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon">📦</div>
+      <div class="fc-title">Zero Config</div>
+      <div class="fc-desc">One function call. Name your store, start reading and writing. No migrations, no setup.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-label">Backends</div>
+  <div class="section-title">Right tool, auto-selected</div>
+  <div class="backends">
+    <div class="backend-row header">
+      <div>Backend</div><div>When</div><div>Storage</div><div>SQL</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">sqlite-native</div><div class="backend-desc">Node.js + better-sqlite3</div><div class="backend-storage">File (.db)</div><div class="check">✓</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">sqlite-wasm</div><div class="backend-desc">Browser + sql.js</div><div class="backend-storage">IndexedDB</div><div class="check">✓</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">sqlite-memory</div><div class="backend-desc">Testing</div><div class="backend-storage">RAM</div><div class="check">✓</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">idb</div><div class="backend-desc">Browser (no sql.js)</div><div class="backend-storage">IndexedDB</div><div class="cross">✗</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">fs</div><div class="backend-desc">Node.js (zero deps)</div><div class="backend-storage">JSON files</div><div class="cross">✗</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">ls</div><div class="backend-desc">No IndexedDB</div><div class="backend-storage">localStorage</div><div class="cross">✗</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">mem</div><div class="backend-desc">Last resort</div><div class="backend-storage">RAM</div><div class="cross">✗</div>
+    </div>
+    <div class="backend-row">
+      <div class="backend-name">custom</div><div class="backend-desc">Bring your own</div><div class="backend-storage">You decide</div><div class="backend-storage">Optional</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-label">Philosophy</div>
+  <div class="section-title">Why SQLite</div>
+  <div class="philosophy">
+    <div class="phil-card highlight">
+      <div class="phil-label">One database for everything</div>
+      <div class="phil-title">SQLite is the file format</div>
+      <div class="phil-desc">Key-value is enough for most AI app state. But when you need relations, indexes, or queries — SQL is there. No second database, no migration to a "real" DB later.</div>
+    </div>
+    <div class="phil-card">
+      <div class="phil-label">Graceful degradation</div>
+      <div class="phil-title">Always works</div>
+      <div class="phil-desc">Can't load WASM? Falls back to IndexedDB. No IndexedDB? localStorage. No storage at all? In-memory Map. Your app never crashes because of persistence.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-label">Ecosystem</div>
+  <div class="section-title">Part of the agentic family</div>
+  <div class="features" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+    <div class="feature-card"><div class="fc-icon">⚡</div><div class="fc-title">agentic-core</div><div class="fc-desc">LLM calls + vision</div></div>
+    <div class="feature-card"><div class="fc-icon">👁</div><div class="fc-title">agentic-sense</div><div class="fc-desc">Human perception</div></div>
+    <div class="feature-card"><div class="fc-icon">🎯</div><div class="fc-title">agentic-act</div><div class="fc-desc">Intent execution</div></div>
+    <div class="feature-card" style="border-color:rgba(251,146,60,0.2);background:rgba(251,146,60,0.02)"><div class="fc-icon">💾</div><div class="fc-title">agentic-store</div><div class="fc-desc">Persistence layer</div></div>
+    <div class="feature-card"><div class="fc-icon">✨</div><div class="fc-title">agentic-render</div><div class="fc-desc">Streaming UI</div></div>
+  </div>
+</section>
+
+<footer>
+  <div class="logo">agentic-store</div>
+  <div class="links">
+    <a href="https://github.com/momomo-agent/agentic-store">GitHub</a>
+    <a href="https://github.com/momomo-agent">momomo-agent</a>
+  </div>
+</footer>
+
+</body>
+</html>
