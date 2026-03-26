@@ -1,4 +1,4 @@
-const { createStore } = require('./store.js')
+const { createStore } = require('./agentic-store.js')
 
 async function test() {
   const results = []
