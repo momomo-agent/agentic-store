@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>agentic-store — Persistent state for AI apps</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💾</text></svg>">
+  <style>
+    :root {
+      --bg: #050505; --surface: #0f0f0f; --border: #1c1c1c;
+      --text: #e4e4e7; --text-2: #888; --accent: #86efac;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 3rem 1rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    .sub { color: var(--text-2); margin-bottom: 2rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; width: 100%; max-width: 500px; margin-bottom: 1rem; }
+    .card h3 { font-size: 0.85rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    input { width: 100%; padding: 0.5rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.9rem; margin-bottom: 0.5rem; }
+    button { padding: 0.5rem 1rem; border-radius: 6px; border: none; font-size: 0.85rem; cursor: pointer; background: var(--accent); color: #000; font-weight: 600; }
+    button:hover { opacity: 0.9; }
+    .row { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+    .row input { flex: 1; }
+    .entries { font-family: 'SF Mono', monospace; font-size: 0.8rem; max-height: 300px; overflow-y: auto; }
+    .entry { padding: 0.4rem 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    .entry-key { color: var(--accent); }
+    .entry-val { color: var(--text-2); max-width: 60%; text-align: right; overflow: hidden; text-overflow: ellipsis; }
+    .stats { font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>💾 agentic-store</h1>
+  <p class="sub">Persistent state for AI apps — localStorage + SQLite</p>
+
+  <!-- CRUD -->
+  <div class="card">
+    <h3>📝 Key-Value Store</h3>
+    <div class="row">
+      <input id="key" placeholder="key">
+      <input id="value" placeholder="value (JSON ok)">
+    </div>
+    <div class="row">
+      <button onclick="doSet()">Set</button>
+      <button onclick="doGet()">Get</button>
+      <button onclick="doDel()" style="background:#ef4444;color:#fff">Del</button>
+      <button onclick="doClear()" style="background:#333;color:#fff">Clear All</button>
+    </div>
+    <div id="result" class="stats"></div>
+  </div>
+
+  <!-- Browse -->
+  <div class="card">
+    <h3>📋 All Entries</h3>
+    <div class="entries" id="entries">Loading...</div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <!-- Usage -->
+  <div class="card">
+    <h3>📦 Usage</h3>
+    <pre style="font-size:0.8rem;color:var(--text-2);overflow-x:auto;white-space:pre-wrap">&lt;script src="agentic-store.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+const store = AgenticStore.createStore({ name: 'my-app' })
+await store.set('user', { name: 'Alice', age: 30 })
+const user = await store.get('user')
+const keys = await store.keys()
+await store.delete('user')
+&lt;/script&gt;</pre>
+  </div>
+
+  <p class="sub" style="margin-top:1rem"><a href="https://github.com/momomo-agent/agentic-store">GitHub</a> · Part of the <a href="https://github.com/momomo-agent/agentic">agentic</a> family</p>
+
+  <script src="../agentic-store.js"></script>
+  <script>
+    const store = AgenticStore.createStore({ name: 'agentic-store-demo' })
+
+    async function refresh() {
+      const keys = await store.keys()
+      const el = document.getElementById('entries')
+      if (!keys.length) { el.innerHTML = '<div style="color:var(--text-2)">Empty — add some keys above</div>'; document.getElementById('stats').textContent = '0 entries'; return }
+      let html = ''
+      for (const k of keys) {
+        const v = await store.get(k)
+        html += `<div class="entry"><span class="entry-key">${k}</span><span class="entry-val">${JSON.stringify(v)}</span></div>`
+      }
+      el.innerHTML = html
+      document.getElementById('stats').textContent = `${keys.length} entries`
+    }
+
+    async function doSet() {
+      const k = document.getElementById('key').value.trim()
+      let v = document.getElementById('value').value.trim()
+      if (!k) return
+      try { v = JSON.parse(v) } catch {}
+      await store.set(k, v)
+      document.getElementById('result').textContent = `✅ Set "${k}"`
+      refresh()
+    }
+
+    async function doGet() {
+      const k = document.getElementById('key').value.trim()
+      if (!k) return
+      const v = await store.get(k)
+      document.getElementById('result').textContent = v !== undefined ? `"${k}" = ${JSON.stringify(v)}` : `❌ "${k}" not found`
+    }
+
+    async function doDel() {
+      const k = document.getElementById('key').value.trim()
+      if (!k) return
+      await store.delete(k)
+      document.getElementById('result').textContent = `🗑️ Deleted "${k}"`
+      refresh()
+    }
+
+    async function doClear() {
+      const keys = await store.keys()
+      for (const k of keys) await store.delete(k)
+      document.getElementById('result').textContent = `🗑️ Cleared all`
+      refresh()
+    }
+
+    refresh()
+  </script>
+</body>
+</html>
